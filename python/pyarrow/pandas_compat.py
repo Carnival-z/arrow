@@ -36,10 +36,26 @@ from numpy.core.numerictypes import sctypes as _np_sctypes
 import pyarrow as pa
 from pyarrow.lib import _pandas_api, frombytes  # noqa
 
+safe_builtins = {
+    'range',
+    'complex',
+    'set',
+    'frozenset',
+    'slice',
+}
+
 
 _logical_type_map = {}
-
-
+#safe deserilize
+class SafeUnpickler(pickle.Unpickler):
+    def find_class(self, module, name):
+        # Only allow safe classes from builtins.
+        if module == "builtins" and name in safe_builtins:
+            return getattr(builtins, name)
+        # Forbid everything else.
+        raise pickle.UnpicklingError("global '%s.%s' is forbidden" %
+                                     (module, name))
+        
 def get_logical_type_map():
     global _logical_type_map
 
@@ -722,7 +738,7 @@ def _reconstruct_block(item, columns=None, extension_columns=None):
                                 klass=_int.DatetimeTZBlock,
                                 dtype=dtype)
     elif 'object' in item:
-        block = _int.make_block(pickle.loads(block_arr),
+        block = _int.make_block(SafeUnpickler.loads(block_arr),
                                 placement=placement)
     elif 'py_array' in item:
         # create ExtensionBlock
